@@ -23,22 +23,27 @@ EXECUTE FUNCTION fn_actualizar_stock_producto();
 
 
 -- 2. FUNCIÓN: CALCULAR DESCUENTO SEGÚN TIPO DE CLIENTE
-CREATE OR REPLACE FUNCTION fn_calcular_descuento_cliente(p_id_cliente INT, p_monto NUMERIC)
+
+CREATE OR REPLACE FUNCTION fn_calcular_descuento_cliente(
+    p_id_cliente INTEGER,
+    p_monto NUMERIC
+)
 RETURNS NUMERIC AS $$
 DECLARE
-    v_tipo tipo_cliente_enum;
+    v_tipo_cliente tipo_cliente_enum;
     v_descuento NUMERIC := 0;
 BEGIN
-    SELECT tipo INTO v_tipo FROM cliente WHERE id_cliente = p_id_cliente;
-    
-    IF v_tipo = 'socio' THEN
+    -- Corregido: tipo_cliente en lugar de tipo
+    SELECT tipo_cliente INTO v_tipo_cliente 
+    FROM cliente 
+    WHERE id_cliente = p_id_cliente;
+
+    IF v_tipo_cliente = 'distribuidor' THEN
         v_descuento := p_monto * 0.10;
-    ELSIF v_tipo = 'distribuidor' THEN
-        v_descuento := p_monto * 0.15;
-    ELSIF v_tipo = 'exportador' THEN
-        v_descuento := p_monto * 0.20;
+    ELSIF v_tipo_cliente = 'socio' THEN
+        v_descuento := p_monto * 0.05;
     END IF;
-    
+
     RETURN p_monto - v_descuento;
 END;
 $$ LANGUAGE plpgsql;
