@@ -25,7 +25,7 @@ monetarias expresamente identificadas más abajo.
 | composicion_vino | (cod_vino, id_cepa) | porcentaje |
 | maridaje | id_maridaje; nombre UNIQUE | nombre y temperatura sugerida |
 | vino_maridaje | (cod_vino, id_maridaje) | relación sin atributos adicionales |
-| cliente | id_cliente; nro_doc UNIQUE actual | identidad, dirección, localidad, alta, tipo, excepción de U6 |
+| cliente | id_cliente; nro_doc UNIQUE actual | identidad, dirección, localidad, alta y tipo |
 | cliente_socio | id_cliente | pertenencia al subtipo |
 | cliente_distribuidor | id_cliente; nro_habilitacion UNIQUE | zona y habilitación |
 | cliente_exportador | id_cliente | país principal |
@@ -87,10 +87,10 @@ alguien escriba importes inconsistentes directamente.
   del precio actual de `vino`. La bonificación guardada es un importe monetario,
   no una tasa. U1 es una operación explícita de recálculo, no el comportamiento
   normal de una consulta histórica.
-- **Descuentos:** se calculan tasas 0.10, 0.20 y 0.30 según el tipo. U6 se interpreta
-  como excepción autorizada a RN-06; se añade `descuento_excepcional`, nullable y
-  restringido a 0.35 para exportadores. No se almacena una copia de cada tasa base.
-  Si la cátedra considera RN-06 invariable, confirmar esta excepción antes de U6.
+- **Descuentos:** se calculan tasas 0.10, 0.20 y 0.30 según el tipo. U6 solicita una
+  excepción del 35 % que el esquema actual no permite almacenar. Queda pendiente
+  acordar su representación con Valentina y confirmar con la cátedra su relación
+  con RN-06. Este aporte no agrega ese campo ni almacena copias de las tasas base.
 - **FK:** RESTRICT conserva referencias a vino, bodega, transportista y sala con
   movimientos. CASCADE en renglones/subtipos/asociaciones elimina dependientes
   de su propietario. El DDL omite ON UPDATE: PostgreSQL usa NO ACTION; se asume
