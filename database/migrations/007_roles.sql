@@ -3,54 +3,230 @@
 -- Etapa 2: Creación de Roles y Asignación de Privilegios Mínimos
 -- ============================================================
 
--- 1) CREACIÓN DE ROLES BASE EN POSTGRESQL
+-- Ejecutar después de:
+-- 001_esquema.sql
+-- 003_funciones.sql
+-- 004_procedimientos.sql
+-- 005_triggers.sql
+-- 006_vistas.sql
 
--- Creamos los roles (si es que no existen previamente para evitar errores)
+
+-- ============================================================
+-- 1. CREACIÓN DE ROLES SIN CONTRASEÑAS
+-- ============================================================
+
+-- Los roles representan conjuntos de permisos.
+-- Los usuarios de conexión se crean por separado.
+
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'rol_admin_sistema') THEN
-        CREATE ROLE rol_admin_sistema LOGIN PASSWORD 'Admin123*';
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_roles
+        WHERE rolname = 'rol_admin_sistema'
+    ) THEN
+        CREATE ROLE rol_admin_sistema NOLOGIN;
     END IF;
 
-    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'rol_operador_ventas') THEN
-        CREATE ROLE rol_operador_ventas LOGIN PASSWORD 'Ventas123*';
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_roles
+        WHERE rolname = 'rol_operador_ventas'
+    ) THEN
+        CREATE ROLE rol_operador_ventas NOLOGIN;
     END IF;
 
-    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'rol_gerente_comercial') THEN
-        CREATE ROLE rol_gerente_comercial LOGIN PASSWORD 'Gerente123*';
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_roles
+        WHERE rolname = 'rol_gerente_comercial'
+    ) THEN
+        CREATE ROLE rol_gerente_comercial NOLOGIN;
     END IF;
 END
 $$;
 
--- -------------------------------------------------------------
-
--- 2) ASIGNACIÓN DE PRIVILEGIOS: ROL ADMIN SISTEMA
-
--- El administrador tiene control total sobre todas las tablas del esquema
-
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO rol_admin_sistema;
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO rol_admin_sistema;
+-- Asegurar que los roles existentes tampoco
+-- puedan iniciar sesión directamente.
+ALTER ROLE rol_admin_sistema NOLOGIN;
+ALTER ROLE rol_operador_ventas NOLOGIN;
+ALTER ROLE rol_gerente_comercial NOLOGIN;
 
 
--- -------------------------------------------------------------
+-- ============================================================
+-- 2. SEGURIDAD GENERAL DEL ESQUEMA
+-- ============================================================
 
--- 3) ASIGNACIÓN DE PRIVILEGIOS: ROL OPERADOR VENTAS
+-- Retirar permisos públicos.
+REVOKE ALL ON SCHEMA public FROM PUBLIC;
 
--- Puede consultar catálogos (vinos, salas, clientes) y registrar ventas (comprobantes y renglones)
+REVOKE ALL ON ALL TABLES IN SCHEMA public
+FROM PUBLIC;
 
-GRANT SELECT ON vino, sala_venta, cliente, stock_sala TO rol_operador_ventas;
-GRANT SELECT, INSERT, UPDATE ON comprobante, renglon_comprobante TO rol_operador_ventas;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA public
+FROM PUBLIC;
 
--- Permiso para usar las secuencias de comprobantes al insertar nuevas ventas
+REVOKE EXECUTE ON ALL ROUTINES IN SCHEMA public
+FROM PUBLIC;
 
-GRANT USAGE, SELECT ON SEQUENCE comprobante_numero_comprobante_seq TO rol_operador_ventas;
+-- Retirar privilegios anteriores del operador
+-- y gerente para reasignar únicamente los necesarios.
+REVOKE ALL ON ALL TABLES IN SCHEMA public
+FROM rol_operador_ventas, rol_gerente_comercial;
+
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA public
+FROM rol_operador_ventas, rol_gerente_comercial;
+
+REVOKE EXECUTE ON ALL ROUTINES IN SCHEMA public
+FROM rol_operador_ventas, rol_gerente_comercial;
+
+-- Acceso controlado al esquema.
+GRANT USAGE ON SCHEMA public
+TO rol_admin_sistema,
+   rol_operador_ventas,
+   rol_gerente_comercial;
 
 
--- -------------------------------------------------------------
+-- ============================================================
+-- 3. ROL ADMINISTRADOR DEL SISTEMA
+-- ============================================================
 
--- 4) ASIGNACIÓN DE PRIVILEGIOS: ROL GERENTE COMERCIAL
+-- Administración de objetos existentes.
+-- La propiedad real se configura por separado.
 
--- El gerente tiene acceso de lectura (SELECT) a las tablas clave y a las vistas del sistema
+GRANT CREATE ON SCHEMA public
+TO rol_admin_sistema;
 
-GRANT SELECT ON vino, cliente, cliente_exportador, permiso_exportacion, comprobante TO rol_gerente_comercial;
-GRANT SELECT ON vw_stock_total_vinos, vw_clientes_exportadores_info, vw_resumen_comprobantes TO rol_gerente_comercial;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public
+TO rol_admin_sistema;
+
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public
+TO rol_admin_sistema;
+
+GRANT EXECUTE ON ALL ROUTINES IN SCHEMA public
+TO rol_admin_sistema;
+
+
+-- ============================================================
+-- 4. ROL OPERADOR DE VENTAS / API
+-- ============================================================
+
+-- Consultar información necesaria para las operaciones.
+GRANT SELECT ON
+    vino,
+    composicion_vino,
+    cepa,
+    maridaje,
+    vino_maridaje,
+    bodega,
+    sala_venta,
+    localidad,
+    cliente,
+    cliente_socio,
+    cliente_distribuidor,
+    cliente_exportador,
+    permiso_exportacion,
+    transportista,
+    stock_deposito,
+    stock_sala,
+    comprobante,
+    renglon_comprobante,
+    ingreso,
+    renglon_ingreso,
+    transferencia,
+    renglon_transferencia
+TO rol_operador_ventas;
+
+
+-- Registrar y actualizar comprobantes de venta.
+GRANT INSERT, UPDATE ON
+    comprobante,
+    renglon_comprobante
+TO rol_operador_ventas;
+
+
+-- Registrar ingresos y transferencias.
+GRANT INSERT, UPDATE ON
+    ingreso,
+    renglon_ingreso,
+    transferencia,
+    renglon_transferencia
+TO rol_operador_ventas;
+
+
+-- Las escrituras en stock NO se conceden directamente.
+-- Requieren procedimientos seguros coordinados
+-- con Santiago y triggers de Sol.
+
+
+-- Uso de secuencias para insertar nuevos registros.
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA public
+TO rol_operador_ventas;
+
+
+-- ============================================================
+-- 5. EJECUCIÓN DE FUNCIONES DE SANTIAGO
+-- ============================================================
+
+GRANT EXECUTE ON FUNCTION
+    fn_descuento_cliente(INTEGER)
+TO rol_operador_ventas;
+
+GRANT EXECUTE ON FUNCTION
+    fn_calcular_descuento_cliente(INTEGER, NUMERIC)
+TO rol_operador_ventas;
+
+GRANT EXECUTE ON FUNCTION
+    fn_stock_sala(INTEGER, INTEGER)
+TO rol_operador_ventas;
+
+GRANT EXECUTE ON FUNCTION
+    fn_total_comprobante(INTEGER)
+TO rol_operador_ventas;
+
+GRANT EXECUTE ON FUNCTION
+    fn_antiguedad_anios(DATE)
+TO rol_operador_ventas;
+
+GRANT EXECUTE ON FUNCTION
+    fn_antiguedad_anios(DATE, DATE)
+TO rol_operador_ventas;
+
+
+-- ============================================================
+-- 6. EJECUCIÓN DE PROCEDIMIENTOS TRANSACCIONALES
+-- ============================================================
+
+GRANT EXECUTE ON PROCEDURE
+    sp_procesar_ingreso(INTEGER)
+TO rol_operador_ventas;
+
+GRANT EXECUTE ON PROCEDURE
+    sp_procesar_transferencia(INTEGER)
+TO rol_operador_ventas;
+
+
+-- ============================================================
+-- 7. ACCESO A LAS VISTAS DEL SISTEMA
+-- ============================================================
+
+-- El operador consulta las vistas desde la API.
+GRANT SELECT ON
+    vw_stock_total_vinos,
+    vw_clientes_exportadores_info,
+    vw_resumen_comprobantes
+TO rol_operador_ventas;
+
+
+-- ============================================================
+-- 8. ROL GERENTE COMERCIAL - SOLO LECTURA
+-- ============================================================
+
+-- Acceso a reportes mediante vistas.
+GRANT SELECT ON
+    vw_stock_total_vinos,
+    vw_clientes_exportadores_info,
+    vw_resumen_comprobantes
+TO rol_gerente_comercial;
+
+
+-- ============================================================
+-- FIN DEL ARCHIVO 007_roles.sql
+-- ============================================================
