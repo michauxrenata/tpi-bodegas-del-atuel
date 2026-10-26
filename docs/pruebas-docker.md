@@ -6,7 +6,7 @@
 
 ## Etapa
 
-**Etapa 1 — Modelado, Hito H1**
+**Etapa 1 — Modelado**
 
 ## Responsable
 
@@ -14,23 +14,22 @@
 
 ## Fecha
 
-**20 de octubre de 2026**
+**26 de octubre de 2026**
 
 ---
 
 ## 1. Objetivo
 
-El objetivo de esta prueba es preparar y verificar un entorno reproducible para ejecutar PostgreSQL mediante Docker Compose.
+El objetivo de esta prueba fue preparar y verificar un entorno reproducible para ejecutar PostgreSQL mediante Docker Compose y comprobar que el esquema inicial de la base de datos pudiera crearse correctamente desde cero.
 
-En esta primera instancia se comprueba que:
+Durante la prueba se verificó que:
 
-- Docker Compose pueda iniciar el servicio de PostgreSQL.
-- Las variables de entorno sean reconocidas correctamente.
-- La base de datos local se cree.
-- El contenedor acepte conexiones.
-- PostgreSQL quede disponible para ejecutar posteriormente el esquema inicial.
-
-La ejecución definitiva del archivo `001_esquema.sql` queda pendiente hasta que el DER sea revisado, aprobado por el equipo y reflejado en una nueva versión del script.
+- Docker Compose iniciara correctamente PostgreSQL.
+- Las variables de entorno fueran reconocidas.
+- La base de datos local se creara correctamente.
+- El contenedor aceptara conexiones.
+- El archivo `001_esquema.sql` se ejecutara sin errores.
+- Las tablas del esquema inicial se crearan correctamente.
 
 ---
 
@@ -43,6 +42,7 @@ Para esta prueba se utilizaron los siguientes archivos:
 .env.example
 .gitignore
 compose.yaml
+database/migrations/001_esquema.sql
 ```
 
 ### Archivo `.env`
@@ -53,7 +53,7 @@ Este archivo no debe subirse al repositorio porque contiene información sensibl
 
 ### Archivo `.env.example`
 
-El archivo `.env.example` documenta las variables necesarias para configurar el entorno, pero no contiene contraseñas reales.
+El archivo `.env.example` documenta las variables necesarias para configurar el entorno, sin incluir contraseñas reales.
 
 ### Archivo `.gitignore`
 
@@ -70,6 +70,10 @@ El archivo `.gitignore` evita que se suban al repositorio:
 ### Archivo `compose.yaml`
 
 El archivo `compose.yaml` define el servicio de PostgreSQL, sus variables de entorno, el puerto de conexión, el volumen de datos y el healthcheck.
+
+### Archivo `001_esquema.sql`
+
+El archivo `database/migrations/001_esquema.sql` contiene la definición inicial de la base de datos, incluyendo las tablas, claves y relaciones correspondientes al modelo aprobado para esta etapa.
 
 ---
 
@@ -91,7 +95,7 @@ La versión utilizada de PostgreSQL cumple con el requisito de la consigna, que 
 
 El archivo `.env` se creó manualmente en la raíz del repositorio.
 
-La estructura del repositorio quedó organizada de la siguiente manera:
+La estructura utilizada fue:
 
 ```text
 tpi-bodegas-del-atuel/
@@ -100,6 +104,8 @@ tpi-bodegas-del-atuel/
 ├── .gitignore
 ├── compose.yaml
 ├── database/
+│   └── migrations/
+│       └── 001_esquema.sql
 └── docs/
 ```
 
@@ -112,7 +118,7 @@ POSTGRES_PASSWORD=CONTRASENA_LOCAL
 POSTGRES_PORT=5432
 ```
 
-La contraseña real utilizada se mantiene únicamente en el archivo `.env` local y no se incluye en este documento ni en el repositorio.
+La contraseña real utilizada se mantiene únicamente en el archivo `.env` local y no se incluye en el repositorio.
 
 ---
 
@@ -120,91 +126,118 @@ La contraseña real utilizada se mantiene únicamente en el archivo `.env` local
 
 Los comandos se ejecutaron desde la carpeta raíz del repositorio.
 
-### 5.1. Levantar el contenedor
+### 5.1. Actualizar los cambios del repositorio
+
+Antes de realizar la prueba se actualizaron los archivos locales desde la rama principal:
+
+```powershell
+git fetch origin
+git switch main
+git pull origin main
+```
+
+### 5.2. Reiniciar la base desde cero
+
+Para garantizar que la prueba se realizara sobre una base vacía, se eliminaron el contenedor y el volumen local:
+
+```powershell
+docker compose down -v
+```
+
+Luego se inició nuevamente PostgreSQL:
 
 ```powershell
 docker compose up -d
 ```
 
-La opción `-d` permite ejecutar el contenedor en segundo plano.
-
-### 5.2. Verificar el estado del servicio
+### 5.3. Verificar el estado del servicio
 
 ```powershell
 docker compose ps
 ```
 
-### 5.3. Consultar los logs de PostgreSQL
+### 5.4. Consultar los logs de PostgreSQL
 
 ```powershell
 docker compose logs db
 ```
 
-### 5.4. Ingresar a la base de datos
+### 5.5. Ejecutar el esquema inicial
+
+El archivo `001_esquema.sql` se ejecutó dentro del contenedor mediante:
+
+```powershell
+Get-Content .\database\migrations\001_esquema.sql | docker compose exec -T db psql -U postgres -d bodegas_atuel
+```
+
+### 5.6. Ingresar a la base de datos
 
 ```powershell
 docker compose exec db psql -U postgres -d bodegas_atuel
 ```
 
-### 5.5. Detener el entorno
+### 5.7. Detener el entorno
 
 ```powershell
 docker compose down
 ```
 
-### 5.6. Eliminar el contenedor y el volumen
-
-Para crear nuevamente la base desde cero se puede utilizar:
-
-```powershell
-docker compose down -v
-```
-
-La opción `-v` elimina el volumen local de PostgreSQL. Debe utilizarse con precaución porque elimina los datos almacenados en ese volumen.
-
 ---
 
-## 6. Resultado de la prueba
+## 6. Resultado de la prueba de Docker y PostgreSQL
 
-La primera ejecución produjo advertencias porque el archivo `.env` todavía no había sido creado. Docker Compose no encontró las variables necesarias y mostró mensajes similares a los siguientes:
-
-```text
-The "POSTGRES_USER" variable is not set.
-The "POSTGRES_DB" variable is not set.
-The "POSTGRES_PASSWORD" variable is not set.
-The "POSTGRES_PORT" variable is not set.
-```
-
-Como consecuencia, PostgreSQL no pudo inicializarse porque no recibió una contraseña para el usuario administrador.
+La primera ejecución produjo advertencias porque el archivo `.env` todavía no había sido creado. Docker Compose no encontró las variables necesarias y PostgreSQL no pudo inicializarse porque no recibió una contraseña para el usuario administrador.
 
 El problema se solucionó creando manualmente el archivo `.env` en la raíz del repositorio y completando las variables necesarias.
 
-Después de crear el archivo `.env`, se reinició el entorno con:
+Luego se reinició el entorno con:
 
 ```powershell
 docker compose down -v
 docker compose up -d
 ```
 
-Luego se verificó nuevamente el estado mediante:
+Después de corregir la configuración:
 
-```powershell
-docker compose ps
-```
+- El contenedor inició correctamente.
+- PostgreSQL quedó disponible para aceptar conexiones.
+- La base `bodegas_atuel` fue creada.
+- Las variables de entorno fueron reconocidas correctamente.
+- No se produjeron errores de inicialización.
 
-Y se revisaron los logs con:
-
-```powershell
-docker compose logs db
-```
-
-Después de corregir la configuración, el contenedor inició correctamente y PostgreSQL quedó disponible para aceptar conexiones.
+Los logs confirmaron que PostgreSQL estaba listo para aceptar conexiones.
 
 ---
 
-## 7. Verificación de la conexión
+## 7. Ejecución del esquema inicial
 
-Se ingresó al contenedor mediante:
+Una vez actualizado el modelo, se ejecutó el archivo:
+
+```text
+database/migrations/001_esquema.sql
+```
+
+La ejecución se realizó sobre una base vacía mediante:
+
+```powershell
+Get-Content .\database\migrations\001_esquema.sql | docker compose exec -T db psql -U postgres -d bodegas_atuel
+```
+
+El script se ejecutó de principio a fin correctamente.
+
+No se produjeron errores de sintaxis ni errores relacionados con:
+
+- Creación de tablas.
+- Claves primarias.
+- Claves foráneas.
+- Relaciones entre tablas.
+- Tipos de datos incluidos en el esquema.
+
+---
+
+## 8. Verificación de la conexión
+
+Se ingresó a PostgreSQL mediante:
 
 ```powershell
 docker compose exec db psql -U postgres -d bodegas_atuel
@@ -216,27 +249,40 @@ Dentro de PostgreSQL se ejecutaron las siguientes consultas:
 SELECT current_database();
 ```
 
-La consulta permitió verificar que la base activa fuera:
+La consulta confirmó que la base activa era:
 
 ```text
 bodegas_atuel
 ```
 
-También se consultó la versión de PostgreSQL:
+También se consultó la versión del servidor:
 
 ```sql
 SELECT version();
 ```
 
-La base quedó configurada para utilizar PostgreSQL 16.
+La base quedó funcionando sobre PostgreSQL 16.
 
-Finalmente, se comprobó la existencia de tablas mediante:
+---
+
+## 9. Verificación de las tablas
+
+Para listar las tablas creadas se ejecutó:
 
 ```sql
 \dt
 ```
 
-En esta etapa todavía no se ejecutó `001_esquema.sql`, por lo que no se esperaba encontrar las tablas propias del proyecto.
+También se utilizó la siguiente consulta:
+
+```sql
+SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = 'public'
+ORDER BY table_name;
+```
+
+La consulta permitió confirmar que las tablas definidas en `001_esquema.sql` fueron creadas correctamente dentro del esquema `public`.
 
 Para salir de la consola de PostgreSQL se utilizó:
 
@@ -246,29 +292,29 @@ Para salir de la consola de PostgreSQL se utilizó:
 
 ---
 
-## 8. Verificación de seguridad del archivo `.env`
+## 10. Verificación de seguridad del archivo `.env`
 
 El archivo `.env` contiene una contraseña local y no debe subirse al repositorio.
 
-Se verificó que Git lo ignorara mediante:
+Se verificó el estado de Git mediante:
 
 ```powershell
 git status
 ```
 
-También puede comprobarse específicamente con:
+También se puede comprobar específicamente que `.env` esté siendo ignorado con:
 
 ```powershell
 git check-ignore -v .env
 ```
 
-El archivo que sí debe subirse al repositorio es:
+El archivo que debe compartirse en el repositorio es:
 
 ```text
 .env.example
 ```
 
-El archivo que no debe subirse es:
+El archivo que debe permanecer únicamente en cada computadora local es:
 
 ```text
 .env
@@ -276,74 +322,50 @@ El archivo que no debe subirse es:
 
 ---
 
-## 9. Estado de la ejecución de `001_esquema.sql`
+## 11. Resultado final
 
-La ejecución definitiva de `001_esquema.sql` todavía no se realizó porque el DER se encuentra actualmente en revisión.
+La prueba del entorno y del esquema inicial fue satisfactoria.
 
-El equipo está evaluando posibles correcciones relacionadas con:
+Se comprobó que:
 
-- Entidades.
-- Relaciones.
-- Claves primarias.
-- Claves foráneas.
-- Nombres de tablas.
-- Nombres de columnas.
-- Restricciones.
-- Jerarquía de clientes.
-- Relaciones muchos a muchos.
+- Docker Compose funciona correctamente.
+- PostgreSQL 16 inicia dentro del contenedor.
+- La base de datos `bodegas_atuel` se crea correctamente.
+- El contenedor acepta conexiones.
+- El archivo `001_esquema.sql` se ejecuta desde cero sin errores.
+- Las tablas del esquema inicial se crean correctamente.
+- Las claves y relaciones definidas en el script no generan errores durante la creación.
+- El procedimiento puede reproducirse en otra computadora con Docker y el archivo `.env` correspondiente.
 
-Una vez que el DER sea aprobado, se deberá actualizar el archivo:
+---
 
-```text
-database/migrations/001_esquema.sql
-```
+## 12. Observaciones
 
-Después se realizará una nueva prueba sobre una base vacía.
-
-El procedimiento previsto será:
+La prueba se realizó sobre una base vacía utilizando:
 
 ```powershell
 docker compose down -v
-docker compose up -d
-docker compose logs db
 ```
 
-Luego se verificará la creación de las tablas desde PostgreSQL.
+Esto permitió comprobar que el esquema inicial pudiera ejecutarse desde cero, tal como solicita la consigna de la Etapa 1.
+
+Los scripts correspondientes a etapas posteriores no formaron parte de esta prueba. Su implementación y validación se realizarán más adelante, cuando corresponda según el avance del proyecto.
 
 ---
 
-## 10. Próximos pasos
+## 13. Conclusión
 
-Una vez que el DER y el esquema inicial sean aprobados, se realizarán las siguientes actividades:
-
-1. Actualizar `001_esquema.sql`.
-2. Ejecutar el script sobre una base vacía.
-3. Verificar que la creación finalice sin errores.
-4. Comprobar la existencia de todas las tablas.
-5. Revisar las claves primarias y foráneas.
-6. Comparar el esquema físico con el diccionario de datos.
-7. Registrar cualquier error encontrado.
-8. Coordinar las correcciones con el equipo.
-9. Repetir la prueba si fuera necesario.
-10. Documentar el resultado definitivo del Hito H1.
-
----
-
-## 11. Conclusión
-
-La configuración inicial de Docker y PostgreSQL quedó preparada para el desarrollo del proyecto.
+La configuración del entorno local y la prueba del esquema inicial quedaron completadas correctamente.
 
 Se logró:
 
-- Crear el archivo local `.env`.
-- Configurar las variables necesarias.
-- Evitar que `.env` sea subido al repositorio.
-- Levantar PostgreSQL mediante Docker Compose.
-- Crear la base de datos local `bodegas_atuel`.
-- Verificar la conexión al contenedor.
-- Consultar la versión de PostgreSQL.
-- Dejar preparado el entorno para ejecutar el esquema inicial.
+- Preparar el repositorio.
+- Configurar Docker Compose.
+- Proteger el archivo `.env`.
+- Levantar PostgreSQL mediante Docker.
+- Crear la base de datos local.
+- Ejecutar `001_esquema.sql` sobre una base vacía.
+- Verificar la creación de las tablas.
+- Documentar el procedimiento y el resultado.
 
-La validación definitiva de `001_esquema.sql` queda pendiente hasta que el equipo finalice la revisión del DER y actualice el modelo físico.
-
-Por lo tanto, el resultado actual corresponde a una **prueba exitosa de la infraestructura Docker y PostgreSQL**, pero todavía no constituye la validación final del esquema de la base de datos.
+Con esta prueba queda finalizada la parte de infraestructura y validación técnica correspondiente a la responsabilidad de Sol en la Etapa 1 — Modelado.
