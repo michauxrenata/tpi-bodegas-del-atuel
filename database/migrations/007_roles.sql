@@ -18,6 +18,9 @@
 -- Los roles representan conjuntos de permisos.
 -- Los usuarios de conexión se crean por separado.
 
+-- Se crea un rol técnico independiente, sin permiso de inicio de sesión, que será propietario de los procedimientos almacenados.
+-- Esto permite ejecutarlos con SECURITY DEFINER sin otorgar a los usuarios de la aplicación permisos directos para modificar las tablas de stock.
+
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -40,6 +43,14 @@ BEGIN
     ) THEN
         CREATE ROLE rol_gerente_comercial NOLOGIN;
     END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_roles
+        WHERE rolname = 'rol_propietario_procedimientos'
+    ) THEN
+        CREATE ROLE rol_propietario_procedimientos NOLOGIN;
+    END IF;
+
 END
 $$;
 
@@ -48,6 +59,8 @@ $$;
 ALTER ROLE rol_admin_sistema NOLOGIN;
 ALTER ROLE rol_operador_ventas NOLOGIN;
 ALTER ROLE rol_gerente_comercial NOLOGIN;
+ALTER ROLE rol_propietario_procedimientos NOLOGIN;
+
 
 
 -- ============================================================
@@ -84,6 +97,48 @@ TO rol_admin_sistema,
    rol_gerente_comercial;
 
 
+
+-- Se permite al propietario técnico acceder al esquema public para ejecutar los procedimientos que procesan ingresos y transferencias,
+-- manteniendo separados sus permisos de los usuarios de la aplicación.
+GRANT USAGE ON SCHEMA public
+TO rol_propietario_procedimientos;
+
+
+-- Se otorgan al propietario técnico los permisos necesarios para consultar los documentos, validar sus renglones y actualizar
+-- las existencias cuando se procesan ingresos y transferencias. Los operadores ejecutan los procedimientos sin recibir
+-- permisos directos para modificar el inventario.
+
+GRANT SELECT ON
+    public.ingreso,
+    public.renglon_ingreso,
+    public.transferencia,
+    public.renglon_transferencia,
+    public.vino
+TO rol_propietario_procedimientos;
+
+GRANT UPDATE (estado) ON
+    public.ingreso,
+    public.transferencia
+TO rol_propietario_procedimientos;
+
+GRANT SELECT, INSERT, UPDATE ON
+    public.stock_deposito,
+    public.stock_sala
+TO rol_propietario_procedimientos;
+
+
+-- Se asigna la propiedad de los procedimientos a un rol técnico sin acceso de inicio de sesión, para que SECURITY DEFINER
+-- permita procesar los movimientos de stock con los permisos necesarios, sin otorgarlos directamente a los operadores.
+
+ALTER PROCEDURE public.sp_procesar_ingreso(INTEGER)
+OWNER TO rol_propietario_procedimientos;
+
+ALTER PROCEDURE public.sp_procesar_transferencia(INTEGER)
+OWNER TO rol_propietario_procedimientos;
+
+-- Para que estos ALTER PROCEDURE funcionen, la migración deberá ejecutarse con una cuenta que tenga autoridad para transferir la propiedad,
+-- como el administrador de PostgreSQL utilizado en el entorno de desarrollo. Además, 004_procedimientos.sql debe haberse ejecutado previamente.
+
 -- ============================================================
 -- 3. ROL ADMINISTRADOR DEL SISTEMA
 -- ============================================================
@@ -94,6 +149,7 @@ TO rol_admin_sistema,
 GRANT CREATE ON SCHEMA public
 TO rol_admin_sistema;
 
+-- Esto da permiso a las tablas, pero no lo convierte en su propietario
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public
 TO rol_admin_sistema;
 
@@ -102,6 +158,19 @@ TO rol_admin_sistema;
 
 GRANT EXECUTE ON ALL ROUTINES IN SCHEMA public
 TO rol_admin_sistema;
+-- ============================================================
+-- PROPIEDAD DE LOS OBJETOS Y SECURITY DEFINER
+-- ============================================================
+
+-- El rol rol_admin_sistema es NOLOGIN.
+-- La asignación de propiedad de tablas y procedimientos se coordinará con Santiago y Sol.
+
+-- Los procedimientos SECURITY DEFINER se ejecutarán con los privilegios de su propietario.
+
+-- La API utilizará rol_operador_ventas y no recibirá permisos directos de escritura sobre las tablas de stock.
+
+
+
 
 
 -- ============================================================
@@ -134,6 +203,10 @@ GRANT SELECT ON
     renglon_transferencia
 TO rol_operador_ventas;
 
+-- RN-06: el operador puede consultar cliente.descuento, pero no modificarlo directamente.
+-- El descuento inicial será asignado por los triggers coordinados con Sol.
+-- El descuento especial del 35 % se aplicará mediante la operación U6 de Santiago.
+
 
 -- Registrar y actualizar comprobantes de venta.
 GRANT INSERT, UPDATE ON
@@ -143,17 +216,76 @@ TO rol_operador_ventas;
 
 
 -- Registrar ingresos y transferencias.
-GRANT INSERT, UPDATE ON
-    ingreso,
-    renglon_ingreso,
-    transferencia,
-    renglon_transferencia
+
+-- Se revocan los permisos generales de actualización sobre los
+-- documentos para impedir que el operador cambie sus estados
+-- directamente, reservando el procesamiento a los procedimientos.
+REVOKE UPDATE ON
+    public.ingreso,
+    public.renglon_ingreso,
+    public.transferencia,
+    public.renglon_transferencia
+FROM rol_operador_ventas;
+
+
+-- Se revoca cualquier permiso previo para modificar directamente
+-- el estado de ingresos y transferencias, de modo que su
+-- procesamiento quede controlado por los procedimientos.
+REVOKE UPDATE (estado) ON public.ingreso
+FROM rol_operador_ventas;
+
+REVOKE UPDATE (estado) ON public.transferencia
+FROM rol_operador_ventas;
+
+
+-- El operador puede crear documentos y modificar sus datos de confección, pero no cambiar directamente sus estados.
+-- El procesamiento queda reservado a los procedimientos transaccionales de Santiago.
+
+GRANT INSERT ON
+    public.ingreso,
+    public.renglon_ingreso,
+    public.transferencia,
+    public.renglon_transferencia
+TO rol_operador_ventas;
+
+GRANT UPDATE (
+    fecha,
+    codigo_transportista,
+    cuit_bodega
+) ON public.ingreso
+TO rol_operador_ventas;
+
+GRANT UPDATE (
+    fecha_confeccion,
+    id_sala
+) ON public.transferencia
+TO rol_operador_ventas;
+
+GRANT UPDATE (
+    cod_vino,
+    cantidad
+) ON public.renglon_ingreso
+TO rol_operador_ventas;
+
+GRANT UPDATE (
+    cod_vino,
+    cantidad
+) ON public.renglon_transferencia
 TO rol_operador_ventas;
 
 
 -- Las escrituras en stock NO se conceden directamente.
--- Requieren procedimientos seguros coordinados
--- con Santiago y triggers de Sol.
+-- Requieren procedimientos seguros coordinados con Santiago y triggers de Sol.
+
+-- ______________________________________________________________________________________
+
+-- Permitir eliminar renglones de documentos.
+-- RN-12: los triggers deben impedir eliminaciones cuando el documento ya no esté en confección.
+
+GRANT DELETE ON
+    renglon_ingreso,
+    renglon_transferencia
+TO rol_operador_ventas;
 
 
 -- Uso de secuencias para insertar nuevos registros.
