@@ -1,82 +1,60 @@
-# Continuación de Santiago: funciones y consultas independientes
+# Avance de Santiago al 30/10/2026
 
-Base de este avance: commit `f209c37d7ee54dcf6f70b9d67f96e749d4bdbdf0`
-de la rama `santiago/datos-h1-h5`. Se suma al primer commit de tres archivos.
-No aplicar el paquete completo anterior: ese paquete incluía propuestas de esquema
-que todavía no se acordaron. Esta continuación no requiere esas propuestas.
+Este aporte parte de 87b2469 en santiago/datos-h1-h5. No reemplaza archivos de
+constraints, triggers, roles ni vistas de otras integrantes.
 
-## Alcance
-
-| Tarea | Avance entregado | Qué falta para la integración del grupo |
+| Tarea | Entrega | Dependencia pendiente |
 |---|---|---|
-| H1 | Se corrige la documentación para que U6 figure como propuesta pendiente, no como campo existente | Revisión del modelo con Renata |
-| H2 funciones | Descuento general, neto, total de comprobante, stock de sala y antigüedad | Sol debe usar el mismo contrato monetario en los triggers |
-| H2 procedimientos | Se mantienen los del primer commit y se agregan pruebas aisladas | Triggers de estados/renglones y concurrencia real |
-| H3 | Estrategia ya entregada en el primer commit | Generador y catálogos del equipo |
-| H4 | Cinco índices candidatos, scripts de medición y evidencia preliminar | Datos H3, ajuste de S4 y mediciones finales |
-| H5 S9 | Consulta directa con agregaciones separadas | Integración con una vista acordada con Valentina |
-| H5 S10–S12 | CTE, subconsulta correlacionada, ventanas, división y anti-join | Probar también con dataset H3 |
-| H5 U1–U5 | SQL parametrizable, bloques BEGIN/ROLLBACK independientes | Auditoría y reglas completas de los triggers |
-| H5 U6 | Pendiente, sin cambios de esquema | Decisión conjunta para almacenar la excepción del 35 % |
+| H1 | Justificación actualizada del descuento persistido | Revisión conjunta del modelo |
+| H2 | fn_descuento_cliente lee cliente.descuento; contrato monetario documentado | Integrar 002 de Vale y triggers/permisos |
+| H2 procedimientos | Se conserva 004 SECURITY DEFINER ya publicado | Permisos del lock, transición controlada y concurrencia |
+| H3 | Orden topológico y estrategia de carga actualizados | Completar generador y triggers |
+| H4 | Cinco índices candidatos y scripts ya entregados | Dataset representativo y mediciones finales |
+| H5 | S9–S12 y U1–U6, con pruebas de resultados | Vista S9 y regresión con todos los triggers |
+| H6–H9 | Contratos para integración | Base API/front, nube e instalación integrada |
 
-Se conserva la firma `fn_calcular_descuento_cliente(id, monto)` y su resultado
-NETO, corrigiendo las tasas anteriores. Las tasas nuevas son 10/20/30 % conforme
-a RN-06. Ninguna función busca un campo `descuento_excepcional` inexistente.
-No se implementan constraints, triggers, roles ni vistas asignados a otras integrantes.
+U6 está implementada: exportadores con más de tres permisos pasan a 0.35.
+No modifica ventas anteriores, no cuenta sólo permisos vigentes y no revierte la
+tasa cuando luego se elimina un permiso. La función retorna el descuento vigente.
+El trigger de asignación base queda a cargo de Sol según contratos_datos.md.
 
-## Ejecutar las pruebas sin tocar la base de trabajo
+## Pruebas aisladas
 
-Con Node.js/npm instalados, desde la raíz del repositorio:
+Desde la raíz, con Node/npm instalados:
 
 ```powershell
+git fetch origin
 cd tools/validacion_sql
-npm ci
-npm test
+npm.cmd ci
+npm.cmd test
 ```
 
-El runner crea PostgreSQL embebido en memoria y descarta la instancia al terminar.
-No se conecta al Docker ni a la nube. Ejecuta las migraciones existentes necesarias,
-las funciones y los procedimientos; comprueba casos correctos, errores y rollback.
-También verifica resultados de S9–S12 y U1–U5, no sólo que el SQL se pueda analizar.
-Esto no sustituye las pruebas globales de Renata ni las de infraestructura de Sol.
+El runner crea y descarta PostgreSQL embebido PGlite. Usa 002 local si está
+integrado; en caso contrario lee el commit de Vale 5cf3e0b mediante git show,
+únicamente en memoria. Por eso se requiere git fetch. No escribe su migración ni
+se conecta a Docker/nube. Aplica el 005 local: no debe confundirse con la versión
+más reciente de Sol, que se diagnostica por separado.
 
-Alternativa en una base PostgreSQL VACÍA y descartable, con conexión psql configurada:
+Pasaron funciones, procedimientos, S9–S12, U1–U6 y rollback. Las regresiones de
+U6 incluyen 0/3/4 permisos, 35 %, repetición sin cambios, historial intacto y U1
+usando precio histórico. Evidencia: evidencias/descuentos_2026-10-30.txt.
+La asignación automática de la tasa base no se afirma probada: falta su trigger.
 
-```sh
-psql -X -v ON_ERROR_STOP=1 -f database/instalar_santiago.sql
-psql -X -v ON_ERROR_STOP=1 -f database/tests/santiago_tests.sql
+Para el diagnóstico de las ramas revisadas, desde la raíz:
+
+```powershell
+node tools/validacion_sql/revisar_integracion.mjs
 ```
 
-El primer archivo crea el esquema: no ejecutarlo sobre una base existente. El segundo
-crea fixtures con IDs negativos reservados y termina con ROLLBACK. Si existe una
-colisión, falla sin borrar datos previos. La comprobación de S9 se realiza en el runner.
+Actualmente devuelve código 1 por tres bloqueos descritos en
+integracion_etapa2_2026-10-30.md. No certificamos H2 completo.
 
-Para ejecutar consultas sobre un dataset que ya tenga datos:
+La alternativa psql usa database/instalar_santiago.sql sólo en una base VACÍA
+y descartable, después de integrar físicamente 002 de Valentina; luego ejecuta
+database/tests/santiago_tests.sql. El runner añade las regresiones de consultas
+que no están en ese archivo. Los ejercicios de update.sql usan BEGIN/ROLLBACK:
+no quitar ROLLBACK para aplicarlos a datos reales sin revisar el alcance.
 
-```sh
-psql -X -v vino=1 -v bodega=30123456789 -f consultas/select_avanzadas.sql
-psql -X -v bodega=30123456789 -f consultas/update.sql
-```
-
-Reemplazar código/CUIT por valores del dataset. U1–U5 hacen ROLLBACK; no convertir
-esos ejercicios en actualizaciones de producción por quitar ROLLBACK sin revisión.
-U1 recalcula usando las tasas actuales; una lectura histórica normal no lo hace.
-
-## Índices y evidencia
-
-`008_indices.sql` define candidatos a probar, no una mejora garantizada. Las
-mediciones en `docs/evidencias/planes_embebido.json` provienen de la prueba
-preliminar del 21/10/2026 contra el mismo `001_esquema.sql`, con las mismas consultas
-e índices incluidos aquí. No fueron repetidas para esta continuación: la corrección
-de descuentos no cambia las consultas del benchmark ni su fixture.
-
-S8 y S5 mejoraron en esa prueba; S4 empeoró. El informe explica el recorrido completo
-del detalle y qué debe evaluarse con múltiples vinos del dataset H3. No se declara
-H4 completo ni se atribuyen esas mediciones al Docker del equipo.
-
-## Límite de este avance
-
-Se pueden estudiar, revisar y guardar estos archivos en la rama propia. Para
-integrarlos como solución completa hay que acordar el contrato de importes con Sol,
-la vista S9 y la excepción U6 con Valentina, y las revisiones del modelo con Renata.
-La API, el frontend y la nube no se agregan sin el trabajo base de sus responsables.
+Los planes previos de docs/evidencias/planes_embebido.json siguen siendo evidencia
+preliminar del 21/10, no mediciones nuevas ni resultados de Docker. H4 permanece
+abierto hasta disponer de la carga representativa.
