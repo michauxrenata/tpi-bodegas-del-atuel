@@ -50,6 +50,14 @@ BEGIN
     ) THEN
         CREATE ROLE rol_propietario_procedimientos NOLOGIN;
     END IF;
+    
+    -- Rol técnico exclusivo para los triggers de ventas.
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_roles
+        WHERE rolname = 'rol_propietario_ventas'
+    ) THEN
+        CREATE ROLE rol_propietario_ventas NOLOGIN;
+    END IF;
 
 END
 $$;
@@ -60,6 +68,7 @@ ALTER ROLE rol_admin_sistema NOLOGIN;
 ALTER ROLE rol_operador_ventas NOLOGIN;
 ALTER ROLE rol_gerente_comercial NOLOGIN;
 ALTER ROLE rol_propietario_procedimientos NOLOGIN;
+ALTER ROLE rol_propietario_ventas NOLOGIN;
 
 
 
@@ -127,6 +136,17 @@ GRANT SELECT, INSERT, UPDATE ON
 TO rol_propietario_procedimientos;
 
 
+-- Permisos requeridos por los procedimientos de Santiago.
+-- Permiten realizar LOCK TABLE ... IN SHARE MODE.
+-- No se conceden al operador de la API.
+
+GRANT UPDATE ON
+    public.renglon_ingreso,
+    public.renglon_transferencia
+TO rol_propietario_procedimientos;
+
+
+
 -- Se asigna la propiedad de los procedimientos a un rol técnico sin acceso de inicio de sesión, para que SECURITY DEFINER
 -- permita procesar los movimientos de stock con los permisos necesarios, sin otorgarlos directamente a los operadores.
 
@@ -138,6 +158,42 @@ OWNER TO rol_propietario_procedimientos;
 
 -- Para que estos ALTER PROCEDURE funcionen, la migración deberá ejecutarse con una cuenta que tenga autoridad para transferir la propiedad,
 -- como el administrador de PostgreSQL utilizado en el entorno de desarrollo. Además, 004_procedimientos.sql debe haberse ejecutado previamente.
+
+
+
+-- ============================================================
+-- ROL TÉCNICO PARA LOS TRIGGERS DE VENTAS
+-- ============================================================
+
+-- Permite acceder a los objetos del esquema.
+GRANT USAGE ON SCHEMA public
+TO rol_propietario_ventas;
+
+-- Permite consultar la información necesaria para validar y registrar una venta.
+GRANT SELECT ON
+    public.vino,
+    public.cliente,
+    public.comprobante,
+    public.renglon_comprobante,
+    public.stock_sala
+TO rol_propietario_ventas;
+
+-- Permite descontar el stock de la sala.
+GRANT UPDATE (cantidad) ON public.stock_sala
+TO rol_propietario_ventas;
+
+-- Permite actualizar los importes del comprobante.
+GRANT UPDATE (
+    subtotal,
+    descuento,
+    total
+) ON public.comprobante
+TO rol_propietario_ventas;
+
+-- Permite consultar la tasa de descuento vigente.
+GRANT EXECUTE ON FUNCTION
+    public.fn_descuento_cliente(INTEGER)
+TO rol_propietario_ventas;
 
 -- ============================================================
 -- 3. ROL ADMINISTRADOR DEL SISTEMA
@@ -208,12 +264,24 @@ TO rol_operador_ventas;
 -- El descuento especial del 35 % se aplicará mediante la operación U6 de Santiago.
 
 
--- Registrar y actualizar comprobantes de venta.
-GRANT INSERT, UPDATE ON
-    comprobante,
-    renglon_comprobante
+
+
+-- REGISTRO DE VENTAS - PERMISOS DEL OPERADOR
+-- El operador puede crear comprobantes y sus renglones.
+GRANT INSERT ON
+    public.comprobante,
+    public.renglon_comprobante
 TO rol_operador_ventas;
 
+-- Se retiran permisos generales de actualización.
+REVOKE UPDATE ON
+    public.comprobante,
+    public.renglon_comprobante
+FROM rol_operador_ventas;
+
+-- No se concede modificación directa de stock.
+-- El descuento del stock y el cálculo de importes
+-- estarán protegidos por los triggers de Sol.
 
 -- Registrar ingresos y transferencias.
 
@@ -255,10 +323,9 @@ GRANT UPDATE (
 ) ON public.ingreso
 TO rol_operador_ventas;
 
-GRANT UPDATE (
-    fecha_confeccion,
-    id_sala
-) ON public.transferencia
+-- RN-11: no permitir modificar la fecha de confección.
+GRANT UPDATE (id_sala)
+ON public.transferencia
 TO rol_operador_ventas;
 
 GRANT UPDATE (
