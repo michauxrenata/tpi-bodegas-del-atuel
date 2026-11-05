@@ -1,5 +1,5 @@
--- Santiago · U1–U5. psql -v bodega=30123456789 -f consultas/update.sql
--- Pruebas reversibles; cada bloque es independiente. U6 requiere acuerdo de esquema.
+-- Santiago · U1–U6. psql -v bodega=30123456789 -f consultas/update.sql
+-- Pruebas reversibles; cada bloque es independiente. U6 requiere cliente.descuento (002 de Valentina).
 \set ON_ERROR_STOP on
 
 -- U1: ejercicio de recálculo con política ACTUAL. No ejecutar sobre historia real
@@ -53,5 +53,16 @@ UPDATE vino v SET precio = ROUND(v.precio * 0.85, 2)
 FROM menos_vendidos m WHERE m.cod_vino = v.cod_vino RETURNING v.*;
 ROLLBACK;
 
--- U6 pendiente: el modelo actual no almacena una excepción de descuento.
--- No se ejecuta ALTER TABLE ni UPDATE ficticio para simular su cumplimiento.
+-- U6: descuento vigente del 35 % para exportadores con más de tres permisos.
+-- Cuenta TODOS los permisos, no solamente los vigentes (la consigna no filtra fechas).
+-- No modifica comprobantes ni renglones históricos. Reejecutar no produce cambios extra.
+-- Ejecutar con administrador autorizado; NO dar UPDATE(cliente) a la API por este ejercicio.
+BEGIN;
+UPDATE public.cliente AS c
+SET descuento = 0.35
+WHERE c.tipo_cliente = 'exportador'
+  AND (SELECT COUNT(*) FROM public.permiso_exportacion AS p
+       WHERE p.id_cliente_exportador = c.id_cliente) > 3
+  AND c.descuento IS DISTINCT FROM 0.35
+RETURNING c.id_cliente, c.tipo_cliente, c.descuento;
+ROLLBACK;

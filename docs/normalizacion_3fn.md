@@ -17,7 +17,7 @@ monetarias expresamente identificadas más abajo.
 | empleado | cuit | nombre, fecha_ingreso, salario, id_sala |
 | finca | id_finca | nombre, superficie_ha, departamento, provincia |
 | parcela | (id_finca, nro_parcela) | superficie_ha, anio_plantacion, id_cepa |
-| lote_uva | nro_lote; alternativamente (id_finca, nro_parcela, campana) | fecha_cosecha, kg_cosechados, bodega destino; la clave alternativa requiere UNIQUE pendiente |
+| lote_uva | nro_lote; alternativamente (id_finca, nro_parcela, campana) | fecha_cosecha, kg_cosechados, bodega destino; la clave alternativa requiere integrar el UNIQUE de 002 de Valentina |
 | analisis_calidad | id_analisis | lote, fecha, Brix, pH, acidez |
 | bodega | cuit | razón social, domicilio |
 | cepa | id_cepa; nombre UNIQUE | nombre y tipo |
@@ -25,7 +25,7 @@ monetarias expresamente identificadas más abajo.
 | composicion_vino | (cod_vino, id_cepa) | porcentaje |
 | maridaje | id_maridaje; nombre UNIQUE | nombre y temperatura sugerida |
 | vino_maridaje | (cod_vino, id_maridaje) | relación sin atributos adicionales |
-| cliente | id_cliente; nro_doc UNIQUE actual | identidad, dirección, localidad, alta y tipo |
+| cliente | id_cliente; nro_doc UNIQUE actual | identidad, dirección, localidad, alta, tipo y descuento vigente |
 | cliente_socio | id_cliente | pertenencia al subtipo |
 | cliente_distribuidor | id_cliente; nro_habilitacion UNIQUE | zona y habilitación |
 | cliente_exportador | id_cliente | país principal |
@@ -87,10 +87,13 @@ alguien escriba importes inconsistentes directamente.
   del precio actual de `vino`. La bonificación guardada es un importe monetario,
   no una tasa. U1 es una operación explícita de recálculo, no el comportamiento
   normal de una consulta histórica.
-- **Descuentos:** se calculan tasas 0.10, 0.20 y 0.30 según el tipo. U6 solicita una
-  excepción del 35 % que el esquema actual no permite almacenar. Queda pendiente
-  acordar su representación con Valentina y confirmar con la cátedra su relación
-  con RN-06. Este aporte no agrega ese campo ni almacena copias de las tasas base.
+- **Descuentos:** la decisión acordada almacena la tasa vigente en cliente.descuento
+  (002 de Valentina). id_cliente determina descuento; tipo_cliente ya no determina
+  por sí solo la tasa vigente porque U6 permite 0.35 para determinados exportadores.
+  Por eso no se trata simplemente de copiar una tasa derivada del tipo. Las tasas
+  base 0.10/0.20/0.30 se asignan al crear o cambiar de tipo; U6 es una actualización
+  explícita. Agregar/quitar permisos no recalcula la tasa ni las ventas históricas.
+  La asignación automática requiere el trigger de Sol, aún pendiente de integrar.
 - **FK:** RESTRICT conserva referencias a vino, bodega, transportista y sala con
   movimientos. CASCADE en renglones/subtipos/asociaciones elimina dependientes
   de su propietario. El DDL omite ON UPDATE: PostgreSQL usa NO ACTION; se asume
@@ -98,8 +101,8 @@ alguien escriba importes inconsistentes directamente.
 
 ## Revisiones para integrar con Renata, Valentina y Sol
 
-1. Agregar UNIQUE de parcela/campaña y vino/nombre/añada/presentación, CHECK
-   positivos, rangos y fechas; no están implementados por el DDL inicial.
+1. Integrar y probar 002 de Valentina: incorpora UNIQUE de parcela/campaña y
+   vino/bodega/nombre/añada/presentación y CHECK avanzados ausentes del DDL inicial.
 2. `cliente.localidad` es texto sin FK; no asegura que exista en el catálogo.
    Evaluar sustituirlo por código/ID sin perder los datos ya cargados.
 3. `nro_doc` UNIQUE es más restrictivo que `(tipo_doc, nro_doc)`; decidir según

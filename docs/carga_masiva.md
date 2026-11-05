@@ -80,3 +80,17 @@ los movimientos históricos importados y documentar su procedencia sintética.
 
 Guardar resultados y tiempos reales. `database/benchmarks/fixture_sintetico.sql`
 es sólo un escenario aislado para planes; NO sustituye la carga H3 ni sus controles.
+
+## Integración de descuentos (30/10/2026)
+
+Aplicar 001 y 002 de Valentina antes de funciones/carga: cliente.descuento ahora
+es NOT NULL. Hasta integrar el trigger base de Sol, el generador debe proporcionar
+0.10/0.20/0.30 según tipo; el generador de Vale revisado ya declara esas tasas.
+Una vez activo el trigger, las altas normales reciben la base automáticamente.
+Para generar casos U6, cargar clientes exportadores y permisos antes de ejecutar
+la actualización explícita; no derivar automáticamente el 35 % de cada permiso.
+Las ventas previas conservan importes. La importación histórica con tasas distintas
+requiere el mecanismo controlado y validaciones descritos arriba.
+
+No iniciar la carga operativa completa hasta resolver los bloqueos de permisos,
+estados y compilación documentados en integracion_etapa2_2026-10-30.md.

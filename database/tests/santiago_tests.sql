@@ -11,10 +11,10 @@ INSERT INTO vino(cod_vino,nombre,tipo,anada,volumen_ml,graduacion,precio,cuit_bo
 VALUES (-903,'Tercero','blanco',2024,750,12,100,'99000000001'),
        (-902,'Segundo','tinto',2024,750,14,200,'99000000001'),
        (-901,'Primero','tinto',2024,750,14,100,'99000000001');
-INSERT INTO cliente(id_cliente,nombre_razon_social,tipo_doc,nro_doc,direccion,localidad,tipo_cliente) OVERRIDING SYSTEM VALUE
-VALUES (-901,'Socio','TEST','STG1','Prueba','Prueba','socio'),
-       (-902,'Distribuidor','TEST','STG2','Prueba','Prueba','distribuidor'),
-       (-903,'Exportador','TEST','STG3','Prueba','Prueba','exportador');
+INSERT INTO cliente(id_cliente,nombre_razon_social,tipo_doc,nro_doc,direccion,localidad,tipo_cliente,descuento) OVERRIDING SYSTEM VALUE
+VALUES (-901,'Socio','TEST','STG1','Prueba','Prueba','socio',0.10),
+       (-902,'Distribuidor','TEST','STG2','Prueba','Prueba','distribuidor',0.20),
+       (-903,'Exportador','TEST','STG3','Prueba','Prueba','exportador',0.30);
 INSERT INTO cliente_socio VALUES (-901);
 INSERT INTO cliente_distribuidor VALUES (-902,'Prueba','STG-HABILITACION');
 INSERT INTO cliente_exportador VALUES (-903,'Chile');
