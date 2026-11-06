@@ -1,11 +1,10 @@
 -- ============================================================================
--- BODEGAS DEL ATUEL - MEDICIÓN DE RENDIMIENTO (ANTES VS. DESPUÉS)
+-- BODEGAS DEL ATUEL - MEDICIÃ“N DE RENDIMIENTO (ANTES VS. DESPUÃ‰S)
 -- Autor: Renata
 -- ============================================================================
 
-\echo '=== 1. MEDICIÓN ANTES: Consulta sin índice (Búsqueda por precio) ==='
--- Desactivamos temporalmente el uso de índices para simular la consulta "Antes"
-SET enable_seqscan = ON;
+\echo '=== 1. MEDICIÃ“N ANTES: Consulta sin Ã­ndice (BÃºsqueda por precio) ==='
+-- Desactivamos el uso de Ã­ndices para forzar el escaneo secuencial (Antes)
 SET enable_indexscan = OFF;
 
 EXPLAIN ANALYZE
@@ -13,11 +12,11 @@ SELECT cod_vino, nombre, precio, graduacion
 FROM vino
 WHERE precio > 1000.00;
 
-\echo '=== 2. CREACIÓN DEL ÍNDICE ==='
+\echo '=== 2. CREACIÃ“N DEL ÃNDICE ==='
 CREATE INDEX IF NOT EXISTS idx_vino_precio ON vino(precio);
 
-\echo '=== 3. MEDICIÓN DESPUÉS: Consulta optimizada con índice ==='
--- Reactivamos el uso de índices para medir el "Después"
+\echo '=== 3. MEDICIÃ“N DESPUÃ‰S: Consulta optimizada con Ã­ndice ==='
+-- Reactivamos el uso de Ã­ndices para medir el impacto (DespuÃ©s)
 SET enable_indexscan = ON;
 
 EXPLAIN ANALYZE
