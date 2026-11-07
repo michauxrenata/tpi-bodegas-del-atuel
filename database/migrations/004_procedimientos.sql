@@ -82,3 +82,67 @@ $$;
 -- No dejar las rutinas nuevas ejecutables por cualquier usuario.
 REVOKE ALL ON PROCEDURE public.sp_procesar_ingreso(INTEGER) FROM PUBLIC;
 REVOKE ALL ON PROCEDURE public.sp_procesar_transferencia(INTEGER) FROM PUBLIC;
+
+-- Cierre de confección: valida el documento y cambia sólo su estado.
+-- No reserva ni mueve stock. La disponibilidad se comprueba al procesar.
+-- Mantiene el orden de bloqueo de sp_procesar_*: tabla de detalles, cabecera.
+CREATE OR REPLACE PROCEDURE public.sp_terminar_ingreso(p_codigo INTEGER)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE v_ingreso public.ingreso%ROWTYPE;
+BEGIN
+    LOCK TABLE public.renglon_ingreso IN SHARE MODE;
+    SELECT * INTO v_ingreso FROM public.ingreso
+    WHERE codigo_ingreso = p_codigo FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Ingreso % inexistente', p_codigo USING ERRCODE = 'P0002';
+    END IF;
+    IF v_ingreso.estado <> 'en_confeccion' THEN
+        RAISE EXCEPTION 'Ingreso % debe estar en confección', p_codigo USING ERRCODE = '23514';
+    END IF;
+    IF NOT EXISTS (SELECT FROM public.renglon_ingreso WHERE codigo_ingreso = p_codigo) THEN
+        RAISE EXCEPTION 'Ingreso sin renglones' USING ERRCODE = '23514';
+    END IF;
+    IF EXISTS (
+        SELECT FROM public.renglon_ingreso ri JOIN public.vino v USING (cod_vino)
+        WHERE ri.codigo_ingreso = p_codigo
+        AND (ri.cantidad <= 0 OR v.cuit_bodega <> v_ingreso.cuit_bodega)
+    ) THEN
+        RAISE EXCEPTION 'Cantidad inválida o bodega incompatible en ingreso %', p_codigo
+            USING ERRCODE = '23514';
+    END IF;
+    UPDATE public.ingreso SET estado = 'terminado' WHERE codigo_ingreso = p_codigo;
+END;
+$$;
+
+CREATE OR REPLACE PROCEDURE public.sp_terminar_transferencia(p_numero INTEGER)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE v_transferencia public.transferencia%ROWTYPE;
+BEGIN
+    LOCK TABLE public.renglon_transferencia IN SHARE MODE;
+    SELECT * INTO v_transferencia FROM public.transferencia
+    WHERE numero_solicitud = p_numero FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Transferencia % inexistente', p_numero USING ERRCODE = 'P0002';
+    END IF;
+    IF v_transferencia.estado <> 'en_confeccion' THEN
+        RAISE EXCEPTION 'Transferencia % debe estar en confección', p_numero USING ERRCODE = '23514';
+    END IF;
+    IF NOT EXISTS (SELECT FROM public.renglon_transferencia WHERE numero_solicitud = p_numero) THEN
+        RAISE EXCEPTION 'Transferencia sin renglones' USING ERRCODE = '23514';
+    END IF;
+    IF EXISTS (SELECT FROM public.renglon_transferencia
+        WHERE numero_solicitud = p_numero AND cantidad <= 0) THEN
+        RAISE EXCEPTION 'Cantidad inválida en transferencia %', p_numero USING ERRCODE = '23514';
+    END IF;
+    UPDATE public.transferencia SET estado = 'terminado' WHERE numero_solicitud = p_numero;
+END;
+$$;
+
+REVOKE ALL ON PROCEDURE public.sp_terminar_ingreso(INTEGER) FROM PUBLIC;
+REVOKE ALL ON PROCEDURE public.sp_terminar_transferencia(INTEGER) FROM PUBLIC;

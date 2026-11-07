@@ -58,3 +58,16 @@ no quitar ROLLBACK para aplicarlos a datos reales sin revisar el alcance.
 Los planes previos de docs/evidencias/planes_embebido.json siguen siendo evidencia
 preliminar del 21/10, no mediciones nuevas ni resultados de Docker. H4 permanece
 abierto hasta disponer de la carga representativa.
+
+## Continuación del 06/11/2026
+
+Se agregan sp_terminar_ingreso y sp_terminar_transferencia a 004, con la vía
+controlada en_confeccion → terminado, sin movimientos de stock. El flujo se probó
+con los roles nuevos de Vale y las asignaciones propuestas para estas rutinas.
+Detalles, instrucciones y límites: transiciones_terminado.md. Prueba adicional:
+`npm.cmd run test:transiciones` desde tools/validacion_sql.
+
+El permiso del SHARE LOCK ya está resuelto en la rama de Vale (657ec99). Los
+bloqueos documentados al 30/10 son históricos; no todos siguen vigentes. El cierre
+está implementado en este aporte, pero requiere que Vale incorpore los nuevos
+ALTER PROCEDURE/GRANT y Sol complete los controles de estado/renglones.

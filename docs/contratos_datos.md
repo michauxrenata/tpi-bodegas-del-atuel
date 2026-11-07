@@ -110,3 +110,27 @@ incluye 0/3/4 permisos, tasa base y 35 %, idempotencia, persistencia al eliminar
 un permiso y conservación de importes históricos. También verifica que U1 usa
 precio histórico aunque cambie el precio del vino. No certifica los triggers de
 venta todavía pendientes ni reemplaza las pruebas globales de Renata/Sol.
+
+
+## Ampliación del 06/11/2026: cierre controlado de documentos
+
+Se incorporan sp_terminar_ingreso(INTEGER) y sp_terminar_transferencia(INTEGER).
+Exigen en_confeccion, documento existente y al menos un renglón con cantidad
+positiva. El ingreso también comprueba la bodega elaboradora de sus vinos.
+Cambian sólo estado a terminado: no modifican stocks ni reservan existencias.
+sp_procesar_* vuelve a validar el documento y, en transferencias, la disponibilidad
+real al procesar. Repetir cualquiera de los cierres produce 23514; ID ausente o
+NULL produce P0002. No hay COMMIT interno y el llamador puede hacer ROLLBACK.
+
+Conservan SECURITY DEFINER, search_path restringido y el mismo orden de bloqueo
+que sp_procesar_* (SHARE de detalles antes del FOR UPDATE de cabecera). El bloqueo
+global sigue siendo temporal; no se declara resuelta la concurrencia de RN-12.
+
+Vale ya publicó el permiso UPDATE requerido para el SHARE LOCK. Las dos rutinas
+nuevas requieren asignación de propietario y EXECUTE en 007; el detalle exacto
+está en transiciones_terminado.md. Hasta integrar esas sentencias, el operador no
+puede llamarlas. No se modificó 007 ni se concedió UPDATE(estado) al operador.
+
+El flujo completo aún depende de que Sol proteja los detalles después del cierre,
+las cabeceras relevantes y los INSERT con estado explícito. La nueva operación
+proporciona una vía autorizada, pero no elimina por sí sola esas otras vías.
