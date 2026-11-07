@@ -160,6 +160,15 @@ OWNER TO rol_propietario_procedimientos;
 -- como el administrador de PostgreSQL utilizado en el entorno de desarrollo. Además, 004_procedimientos.sql debe haberse ejecutado previamente.
 
 
+-- Propiedad de los procedimientos de cierre de Santiago.
+-- Permite ejecutar el cierre mediante SECURITY DEFINER sin otorgar al operador UPDATE directo sobre el estado.
+
+ALTER PROCEDURE public.sp_terminar_ingreso(INTEGER)
+OWNER TO rol_propietario_procedimientos;
+
+ALTER PROCEDURE public.sp_terminar_transferencia(INTEGER)
+OWNER TO rol_propietario_procedimientos;
+
 
 -- ============================================================
 -- ROL TÉCNICO PARA LOS TRIGGERS DE VENTAS
@@ -266,12 +275,33 @@ TO rol_operador_ventas;
 
 
 
+
+-- ============================================================
 -- REGISTRO DE VENTAS - PERMISOS DEL OPERADOR
--- El operador puede crear comprobantes y sus renglones.
-GRANT INSERT ON
+-- RN-08 / RN-09
+-- ============================================================
+
+-- Retirar el permiso general de inserción.
+REVOKE INSERT ON
     public.comprobante,
     public.renglon_comprobante
+FROM rol_operador_ventas;
+
+-- El operador puede crear la cabecera de una venta,
+-- pero no cargar manualmente subtotal, descuento ni total.
+GRANT INSERT (
+    fecha,
+    id_cliente,
+    id_sala
+) ON public.comprobante
 TO rol_operador_ventas;
+
+-- Permiso temporal sobre renglones.
+-- Se restringirá a columnas específicas cuando Sol
+-- termine el trigger que calcula precio e importes.
+GRANT INSERT ON public.renglon_comprobante
+TO rol_operador_ventas;
+
 
 -- Se retiran permisos generales de actualización.
 REVOKE UPDATE ON
@@ -306,15 +336,40 @@ REVOKE UPDATE (estado) ON public.transferencia
 FROM rol_operador_ventas;
 
 
--- El operador puede crear documentos y modificar sus datos de confección, pero no cambiar directamente sus estados.
--- El procesamiento queda reservado a los procedimientos transaccionales de Santiago.
 
-GRANT INSERT ON
+-- ============================================================
+-- PERMISOS DE INSERCIÓN DE INGRESOS Y TRANSFERENCIAS
+-- RN-10 / RN-11
+-- ============================================================
+
+-- Eliminar permisos generales de inserción.
+REVOKE INSERT ON
     public.ingreso,
+    public.transferencia
+FROM rol_operador_ventas;
+
+-- El operador puede registrar ingresos,
+-- pero no establecer directamente su estado.
+GRANT INSERT (
+    fecha,
+    codigo_transportista,
+    cuit_bodega
+) ON public.ingreso
+TO rol_operador_ventas;
+
+-- El operador puede crear transferencias,
+-- pero no modificar la fecha ni establecer el estado.
+GRANT INSERT (id_sala)
+ON public.transferencia
+TO rol_operador_ventas;
+
+-- Los renglones se pueden insertar mientras
+-- el documento esté en confección.
+GRANT INSERT ON
     public.renglon_ingreso,
-    public.transferencia,
     public.renglon_transferencia
 TO rol_operador_ventas;
+
 
 GRANT UPDATE (
     fecha,
@@ -401,6 +456,13 @@ GRANT EXECUTE ON PROCEDURE
     sp_procesar_transferencia(INTEGER)
 TO rol_operador_ventas;
 
+-- Permitir al operador cerrar ingresos y transferencias
+-- utilizando los procedimientos controlados.
+
+GRANT EXECUTE ON PROCEDURE
+    public.sp_terminar_ingreso(INTEGER),
+    public.sp_terminar_transferencia(INTEGER)
+TO rol_operador_ventas;
 
 -- ============================================================
 -- 7. ACCESO A LAS VISTAS DEL SISTEMA
